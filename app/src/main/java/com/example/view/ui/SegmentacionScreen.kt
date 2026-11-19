@@ -1,3 +1,8 @@
+/*
+ * ARCHIVO: SegmentacionScreen.kt  (capa VIEW - pantalla del ADMINISTRADOR)
+ * QUÉ HACE: muestra el perfil etario de las personas que SOLO transitan, por periodo
+ * y por acceso, con barras de porcentaje animadas.
+ */
 package com.example.view.ui
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -30,6 +35,9 @@ import kotlin.math.roundToInt
 /** Perfil etario de quienes SOLO transitan (objetivo principal del caso). */
 @Composable
 fun SegmentacionScreen(viewModel: SegmentacionViewModel) {
+    // collectAsStateWithLifecycle: convierte el StateFlow del ViewModel en estado de Compose.
+    // Cada vez que cambia, la pantalla se "recompone" (se redibuja) con los datos nuevos.
+    // "WithLifecycle": deja de observar si la app pasa a segundo plano (ahorra batería).
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(
@@ -43,6 +51,7 @@ fun SegmentacionScreen(viewModel: SegmentacionViewModel) {
 
         SelectorPeriodo(state.periodo, viewModel::cambiarPeriodo)
 
+        // Chips de acceso: "Todos" (id 0) o uno de los 4 accesos.
         // Filtro por acceso: "Todos" (0) o uno de los 4 accesos
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -62,6 +71,7 @@ fun SegmentacionScreen(viewModel: SegmentacionViewModel) {
             }
         }
 
+        // Tarjeta con el total en tránsito y el rango predominante.
         // Conclusión rápida para apoyar decisiones comerciales
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -86,8 +96,11 @@ fun SegmentacionScreen(viewModel: SegmentacionViewModel) {
 }
 
 @Composable
+// FilaRango: nombre del rango, cantidad, % y barra de progreso.
 private fun FilaRango(fila: FilaSegmento) {
     // Animación: la barra "crece" hasta su valor cada vez que cambian los datos
+    // animateFloatAsState: cuando cambia el porcentaje, la barra "crece" suavemente
+    // hasta el nuevo valor en 600 ms en vez de saltar.
     val progreso by animateFloatAsState(
         targetValue = fila.porcentaje,
         animationSpec = tween(600),

@@ -1,3 +1,12 @@
+/*
+ * ARCHIVO: FotoPerfil.kt  (capa VIEW - componente del perfil)
+ * QUÉ HACE: avatar circular del perfil con animaciones de cámara:
+ *  - la foto nueva entra con zoom y rebote,
+ *  - una onda circular se expande al cambiar la foto,
+ *  - el ícono de cámara "late" mientras no haya foto.
+ * CÓMO: AnimatedContent anima el cambio de contenido; Animatable + drawBehind dibuja
+ * la onda; Coil (AsyncImage) carga la imagen desde el archivo.
+ */
 package com.example.view.utils
 
 import androidx.compose.animation.AnimatedContent
@@ -55,7 +64,11 @@ fun FotoPerfilAnimada(
     val colorOnda = MaterialTheme.colorScheme.primary
 
     // Onda expansiva: progreso 0 -> 1 cada vez que la foto cambia (no en la carga inicial)
+    // onda: progreso de 0 a 1. Vale 1 en reposo (onda invisible).
     val onda = remember { Animatable(1f) }
+    // fotoAnterior: recuerda la última foto mostrada. LaunchedEffect(fotoUri) se ejecuta
+    // cuando cambia la URI; si es distinta a la anterior (no es la carga inicial),
+    // reinicia la onda en 0 y la anima hasta 1 en 800 ms.
     var fotoAnterior by remember { mutableStateOf(fotoUri) }
     LaunchedEffect(fotoUri) {
         if (fotoUri != fotoAnterior) {
@@ -68,6 +81,8 @@ fun FotoPerfilAnimada(
     Box(
         modifier = modifier
             .size(tamano * 1.4f)
+            // drawBehind: dibuja DETRÁS del contenido en cada frame. Mientras p < 1 pinta un
+            // círculo cuyo radio crece un 40% y cuyo color/grosor se desvanecen con el progreso.
             .drawBehind {
                 val p = onda.value
                 if (p < 1f) {
@@ -86,10 +101,14 @@ fun FotoPerfilAnimada(
                 .size(tamano)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
+                // Avatar: recorte circular (clip), fondo gris, borde de color y clickable para abrir la cámara.
                 .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
+            // AnimatedContent: cuando targetState (la URI) cambia, anima la salida del contenido
+            // viejo (fadeOut) y la entrada del nuevo (fadeIn + scaleIn desde 50% con spring:
+            // efecto resorte con rebote). Muestra la foto o, si no hay, un ícono de persona.
             AnimatedContent(
                 targetState = fotoUri,
                 transitionSpec = {
@@ -124,6 +143,8 @@ fun FotoPerfilAnimada(
             }
         }
 
+        // El distintivo se ubica abajo-derecha. El tamaño se calcula como fracción del avatar
+        // para que todo escale junto si se cambia "tamano".
         // Distintivo de cámara (abajo a la derecha del avatar)
         Box(
             modifier = Modifier
@@ -140,6 +161,7 @@ fun FotoPerfilAnimada(
                 Icons.Default.PhotoCamera,
                 contentDescription = "Cambiar foto",
                 tint = MaterialTheme.colorScheme.onPrimary,
+                // Solo late (pulsoYRotacion) cuando aún no hay foto, para invitar a tomarla.
                 modifier = if (fotoUri == null) iconModifier.pulsoYRotacion() else iconModifier
             )
         }

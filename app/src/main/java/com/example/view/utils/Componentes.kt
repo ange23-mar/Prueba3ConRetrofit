@@ -1,3 +1,8 @@
+/*
+ * ARCHIVO: Componentes.kt  (capa VIEW - componentes compartidos)
+ * QUÉ HACE: piezas de interfaz reutilizadas por varias pantallas: selector de periodo,
+ * colores de flujo, barra apilada, leyenda, desplegable genérico y formato de fecha.
+ */
 package com.example.view.utils
 
 import androidx.compose.foundation.background
@@ -42,6 +47,9 @@ import java.time.format.DateTimeFormatter
 
 /** Fila de chips para elegir el periodo de consulta (Hoy / 7 días / 30 días / Todo). */
 @Composable
+// SelectorPeriodo: una fila desplazable horizontalmente (horizontalScroll) con un
+// FilterChip por cada valor de Periodo. El chip seleccionado es el actual;
+// al tocar otro se llama a onCambio (el ViewModel recalcula).
 fun SelectorPeriodo(periodo: Periodo, onCambio: (Periodo) -> Unit) {
     Row(
         modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -58,6 +66,8 @@ fun SelectorPeriodo(periodo: Periodo, onCambio: (Periodo) -> Unit) {
 }
 
 /** Colores de cada tipo de flujo, tomados del tema Material 3. */
+// ColoresFlujo: colores tomados del tema Material 3 (cambian solos en modo oscuro).
+// Son propiedades @Composable porque MaterialTheme solo se puede leer dentro de Compose.
 object ColoresFlujo {
     val transito: Color @Composable get() = MaterialTheme.colorScheme.tertiary
     val compra: Color @Composable get() = MaterialTheme.colorScheme.primary
@@ -69,6 +79,9 @@ object ColoresFlujo {
  * Usa Modifier.weight(), por eso solo se dibujan los tramos con valor > 0.
  */
 @Composable
+// BarraApilada: barra horizontal dividida en tramos proporcionales.
+// Cómo: Modifier.weight(valor) reparte el ancho según el valor de cada tramo.
+// Se filtran los tramos en 0 porque weight(0f) no está permitido.
 fun BarraApilada(transito: Int, compra: Int, sinClasificar: Int, modifier: Modifier = Modifier) {
     val tramos = listOf(
         transito to ColoresFlujo.transito,
@@ -96,6 +109,7 @@ fun BarraApilada(transito: Int, compra: Int, sinClasificar: Int, modifier: Modif
 
 /** Punto de color + texto, para la leyenda de las barras. */
 @Composable
+// LeyendaItem: punto de color circular + texto (leyenda de la barra).
 fun LeyendaItem(color: Color, texto: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(color))
@@ -106,6 +120,9 @@ fun LeyendaItem(color: Color, texto: String) {
 
 /** Selector desplegable genérico (acceso, rango etario...). */
 @Composable
+// CampoSelector<T>: desplegable GENÉRICO, sirve para cualquier tipo (Acceso, RangoEtario...).
+// textoDe convierte cada opción en texto. "abierto" controla si el DropdownMenu
+// se muestra; al elegir una opción se informa con onSeleccion y se cierra.
 fun <T> CampoSelector(
     etiqueta: String,
     valorActual: String,
@@ -134,6 +151,8 @@ fun <T> CampoSelector(
     }
 }
 
+// formatearFecha: convierte los milisegundos guardados en Room a texto "dd-MM-yyyy HH:mm"
+// usando la zona horaria del teléfono.
 private val formatoFecha: DateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm")
 
 fun formatearFecha(millis: Long): String =

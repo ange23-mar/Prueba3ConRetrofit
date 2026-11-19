@@ -1,3 +1,10 @@
+/*
+ * ARCHIVO: DashboardScreen.kt  (capa VIEW - pantalla principal del ADMINISTRADOR)
+ * QUÉ HACE: muestra el total de ingresos de la tienda, el aporte de los clientes vía app
+ * y, por cada acceso, cuántos solo transitan, cuántos compran y cuántos están sin clasificar.
+ * CÓMO: observa DashboardUiState; todo lo calcula el DashboardViewModel. Como los datos
+ * vienen de Flows de Room, se actualiza en vivo cuando un cliente registra su ingreso.
+ */
 package com.example.view.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +37,7 @@ import com.example.viewmodels.ResumenAcceso
 import com.example.viewmodels.ResumenClientes
 import kotlin.math.roundToInt
 
+// porcentaje: parte/total en % redondeado; evita la división por cero.
 private fun porcentaje(parte: Int, total: Int): Int =
     if (total == 0) 0 else (parte * 100f / total).roundToInt()
 
@@ -39,17 +47,21 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
     // collectAsStateWithLifecycle: la pantalla se redibuja cuando cambia el uiState
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // Totales de la tienda: suma de todos los accesos (sumOf).
     val totalTransito = state.resumen.sumOf { it.transito }
     val totalCompra = state.resumen.sumOf { it.compra }
     val totalGeneral = state.resumen.sumOf { it.total }
 
+    // LazyColumn: la pantalla completa es una lista desplazable de tarjetas.
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Chips de periodo: al cambiarlo, el ViewModel vuelve a consultar Room.
         item { SelectorPeriodo(state.periodo, viewModel::cambiarPeriodo) }
 
+        // Tarjeta resumen con el total y los porcentajes de tránsito/compra.
         // Tarjeta con el total de la tienda
         item {
             Card(
@@ -75,6 +87,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
         // Aporte de los clientes que registran su ingreso/salida desde la app
         item { TarjetaClientes(state.clientes) }
 
+        // Una tarjeta por acceso (key = id del acceso, para animar/actualizar eficientemente).
         items(state.resumen, key = { it.acceso.id }) { resumen -> TarjetaAcceso(resumen) }
 
         item {
@@ -84,6 +97,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
+                    // Regenera datos ficticios; deshabilitado mientras trabaja (ocupado).
                     onClick = viewModel::cargarDatosEjemplo,
                     enabled = !state.ocupado,
                     modifier = Modifier.weight(1f)
@@ -104,6 +118,7 @@ fun DashboardScreen(viewModel: DashboardViewModel) {
 }
 
 @Composable
+// TarjetaAcceso: nombre, ubicación, barra apilada y leyenda con cantidades y %.
 private fun TarjetaAcceso(r: ResumenAcceso) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -126,6 +141,8 @@ private fun TarjetaAcceso(r: ResumenAcceso) {
 
 /** Métricas alimentadas por los registros de Ingreso/Salida de los clientes (Room, en vivo). */
 @Composable
+// TarjetaClientes: métricas de los clientes registrados en la app (ingresos por motivo,
+// salidas y personas dentro ahora). Estos ingresos ya están sumados en las otras tarjetas.
 private fun TarjetaClientes(c: ResumenClientes) {
     Card(
         modifier = Modifier.fillMaxWidth(),

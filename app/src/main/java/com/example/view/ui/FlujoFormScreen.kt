@@ -1,3 +1,10 @@
+/*
+ * ARCHIVO: FlujoFormScreen.kt  (capa VIEW - pantalla del ADMINISTRADOR)
+ * QUÉ HACE: formulario para clasificar manualmente un grupo de personas en un acceso
+ * (tipo, rango etario, cantidad y foto de evidencia opcional).
+ * CÓMO: estado local con rememberSaveable; al guardar, el FlujoViewModel valida y
+ * devuelve un error o null (éxito -> vuelve a la lista).
+ */
 package com.example.view.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -36,8 +43,12 @@ import com.example.viewmodels.FlujoViewModel
 /** Formulario para registrar cuántas personas de un tipo/rango pasaron por un acceso. */
 @Composable
 fun FlujoFormScreen(viewModel: FlujoViewModel, onDone: () -> Unit) {
+    // collectAsStateWithLifecycle: convierte el StateFlow del ViewModel en estado de Compose.
+    // Cada vez que cambia, la pantalla se "recompone" (se redibuja) con los datos nuevos.
+    // "WithLifecycle": deja de observar si la app pasa a segundo plano (ahorra batería).
     val accesos by viewModel.accesos.collectAsStateWithLifecycle()
 
+    // Un estado por cada campo del formulario (sobreviven a la rotación).
     var accesoId by rememberSaveable { mutableStateOf<Int?>(null) }
     var tipo by rememberSaveable { mutableStateOf(TipoFlujo.TRANSITO) }
     var rango by rememberSaveable { mutableStateOf(RangoEtario.SIN_DATO) }
@@ -51,6 +62,8 @@ fun FlujoFormScreen(viewModel: FlujoViewModel, onDone: () -> Unit) {
     LaunchedEffect(Unit) { visible = true }
 
     // Pantalla de cámara a pantalla completa (CameraX); al capturar vuelve al formulario
+    // Si showCamera es true, la cámara ocupa toda la pantalla y "return" corta el resto
+    // del dibujo. Cámara SIN animaciones (animarCaptura por defecto en false).
     if (showCamera) {
         CameraCapture(
             carpeta = "registros",
@@ -101,6 +114,7 @@ fun FlujoFormScreen(viewModel: FlujoViewModel, onDone: () -> Unit) {
             )
 
             Text("Foto de evidencia (opcional)", style = MaterialTheme.typography.titleSmall)
+            // Recuadro de foto (sin animación). Al tocarlo se abre la cámara.
             PhotoBox(imageUri = fotoUri, onTakePhoto = { showCamera = true })
 
             OutlinedTextField(
@@ -108,12 +122,14 @@ fun FlujoFormScreen(viewModel: FlujoViewModel, onDone: () -> Unit) {
                 onValueChange = { cantidad = it },
                 label = { Text("Cantidad de personas") },
                 singleLine = true,
+                // Teclado numérico para la cantidad.
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth()
             )
 
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
+            // Guardar: el ViewModel valida; si devuelve null, onDone() vuelve a la pantalla anterior.
             Button(
                 onClick = {
                     // El ViewModel valida; si devuelve un mensaje se muestra, si no, se cierra

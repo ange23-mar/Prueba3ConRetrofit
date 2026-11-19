@@ -1,3 +1,9 @@
+/*
+ * ARCHIVO: PerfilScreen.kt  (capa VIEW - pantalla)
+ * QUÉ HACE: muestra la información básica del usuario, permite tomar/actualizar la foto
+ * con CameraX y editar el tipo de cliente y el rango etario.
+ * ES LA ÚNICA PANTALLA CON ANIMACIONES DE CÁMARA (guía de rostro, flash, avatar animado).
+ */
 package com.example.view.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -48,14 +54,21 @@ import com.example.viewmodels.PerfilViewModel
  */
 @Composable
 fun PerfilScreen(viewModel: PerfilViewModel) {
+    // collectAsStateWithLifecycle: convierte el StateFlow del ViewModel en estado de Compose.
+    // Cada vez que cambia, la pantalla se "recompone" (se redibuja) con los datos nuevos.
+    // "WithLifecycle": deja de observar si la app pasa a segundo plano (ahorra batería).
     val usuario by viewModel.usuario.collectAsStateWithLifecycle()
     val mensaje by viewModel.mensaje.collectAsStateWithLifecycle()
     var showCamera by rememberSaveable { mutableStateOf(false) }
 
     // La cámara se dibuja ENCIMA del perfil (no lo reemplaza) para que el avatar siga
     // en composición y su animación de "foto nueva" se vea al cerrar la cámara.
+    // Box apila elementos: primero el perfil y, ENCIMA, la cámara cuando showCamera es true.
+    // Se superpone (en vez de reemplazar el perfil) para que el avatar siga existiendo y
+    // pueda animar la foto nueva justo al cerrarse la cámara.
     Box(Modifier.fillMaxSize()) {
         val u = usuario
+        // Mientras Room entrega el usuario se muestra un indicador de carga.
         if (u == null) {
             CircularProgressIndicator(Modifier.align(Alignment.Center))
         } else {
@@ -69,6 +82,8 @@ fun PerfilScreen(viewModel: PerfilViewModel) {
         }
 
         if (showCamera) {
+            // Cámara del perfil: frontal (selfie), guardada en files/fotos/perfil y con animaciones.
+            // Al capturar: guarda la ruta en la BD (ViewModel) y cierra la cámara.
             CameraCapture(
                 carpeta = "perfil",
                 camaraFrontal = true,
@@ -84,6 +99,8 @@ fun PerfilScreen(viewModel: PerfilViewModel) {
 }
 
 @Composable
+// ContenidoPerfil: recibe datos y funciones (no el ViewModel). Así es más fácil de
+// reutilizar y de previsualizar.
 private fun ContenidoPerfil(
     usuario: Usuario,
     mensaje: String?,
@@ -93,6 +110,7 @@ private fun ContenidoPerfil(
 ) {
     val esCliente = usuario.rol == RolUsuario.CLIENTE
     // Se reinician si cambian en la BD; sobreviven a rotaciones
+    // Copias editables de tipo y rango. hayCambios habilita "Guardar" solo si algo cambió.
     var tipo by rememberSaveable(usuario.tipoCliente) {
         mutableStateOf(usuario.tipoCliente ?: TipoFlujo.COMPRA)
     }
@@ -107,6 +125,7 @@ private fun ContenidoPerfil(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Avatar animado (FotoPerfil.kt). Tocarlo abre la cámara.
         FotoPerfilAnimada(fotoUri = usuario.fotoPerfilUri, onClick = onTomarFoto)
 
         Text(usuario.nombre, style = MaterialTheme.typography.headlineSmall)
@@ -130,6 +149,7 @@ private fun ContenidoPerfil(
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Información básica", style = MaterialTheme.typography.titleMedium)
                 DatoPerfil("Rol", usuario.rol.etiqueta)
+                // Datos propios del cliente: el administrador no tiene tipo de cliente ni rango.
                 if (esCliente) {
                     DatoPerfil("Tipo de cliente", usuario.tipoCliente?.tipoCliente ?: "Sin definir")
                     DatoPerfil("Rango etario", usuario.rangoEtario.etiqueta)
@@ -137,6 +157,7 @@ private fun ContenidoPerfil(
             }
         }
 
+        // Edición: el rango etario se copia a cada ingreso futuro y alimenta la segmentación.
         // Edición del perfil de cliente (el rango etario alimenta la segmentación del Dashboard)
         if (esCliente) {
             Card(Modifier.fillMaxWidth()) {
@@ -171,6 +192,7 @@ private fun ContenidoPerfil(
 }
 
 @Composable
+// DatoPerfil: fila "etiqueta ........ valor" (weight(1f) empuja el valor a la derecha).
 private fun DatoPerfil(etiqueta: String, valor: String) {
     Row(Modifier.fillMaxWidth()) {
         Text(etiqueta, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))

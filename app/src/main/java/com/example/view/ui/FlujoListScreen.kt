@@ -1,3 +1,8 @@
+/*
+ * ARCHIVO: FlujoListScreen.kt  (capa VIEW - pantalla del ADMINISTRADOR)
+ * QUÉ HACE: lista los registros de flujo de los últimos 30 días, permite eliminarlos
+ * (con confirmación) y agregar uno nuevo con el botón flotante (+).
+ */
 package com.example.view.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -43,11 +48,16 @@ import com.example.viewmodels.FlujoViewModel
 
 @Composable
 fun FlujoListScreen(viewModel: FlujoViewModel, onAdd: () -> Unit) {
+    // collectAsStateWithLifecycle: convierte el StateFlow del ViewModel en estado de Compose.
+    // Cada vez que cambia, la pantalla se "recompone" (se redibuja) con los datos nuevos.
+    // "WithLifecycle": deja de observar si la app pasa a segundo plano (ahorra batería).
     val flujos by viewModel.flujos.collectAsStateWithLifecycle()
     val accesos by viewModel.accesos.collectAsStateWithLifecycle()
+    // porEliminar: registro pendiente de confirmar. Si no es null se muestra el diálogo.
     var porEliminar by remember { mutableStateOf<RegistroFlujo?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Lista vacía -> mensaje de ayuda; con datos -> LazyColumn con una tarjeta por registro.
         if (flujos.isEmpty()) {
             Text(
                 "No hay registros. Presiona + para agregar o regenera los datos de ejemplo en Resumen.",
@@ -67,6 +77,7 @@ fun FlujoListScreen(viewModel: FlujoViewModel, onAdd: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Miniatura de la foto de evidencia (si existe)
+                            // Miniatura de la foto de evidencia (Coil carga el archivo local).
                             if (flujo.fotoUri != null) {
                                 AsyncImage(
                                     model = flujo.fotoUri,
@@ -83,6 +94,7 @@ fun FlujoListScreen(viewModel: FlujoViewModel, onAdd: () -> Unit) {
                                 )
                                 Text("${flujo.cantidad} personas · ${flujo.rangoEtario.etiqueta}")
                                 // Registros generados automáticamente por el Ingreso de un cliente
+                                // Etiqueta para los registros generados automáticamente por el Ingreso de un cliente.
                                 if (flujo.usuarioId != null) {
                                     Text(
                                         "Registrado por cliente (app)",
@@ -108,6 +120,7 @@ fun FlujoListScreen(viewModel: FlujoViewModel, onAdd: () -> Unit) {
             }
         }
 
+        // Botón flotante (+) abajo a la derecha: navega al formulario.
         FloatingActionButton(
             onClick = onAdd,
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
@@ -117,6 +130,7 @@ fun FlujoListScreen(viewModel: FlujoViewModel, onAdd: () -> Unit) {
     }
 
     // Confirmación antes de borrar
+    // Diálogo de confirmación: "Eliminar" borra (ViewModel) y cierra; "Cancelar" solo cierra.
     porEliminar?.let { flujo ->
         AlertDialog(
             onDismissRequest = { porEliminar = null },

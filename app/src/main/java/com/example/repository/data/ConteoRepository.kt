@@ -1,3 +1,10 @@
+/*
+ * ARCHIVO: ConteoRepository.kt  (capa DATA - Repository)
+ * QUÉ HACE: fuente única de datos de conteo, flujo y movimientos para los ViewModels
+ * del Dashboard, Segmentación, Registros y del cliente (MovimientoViewModel).
+ * CÓMO: combina varios DAOs. Las LECTURAS devuelven Flow (la UI se actualiza sola);
+ * las ESCRITURAS son funciones suspend que se llaman desde corrutinas.
+ */
 package com.example.repository.data
 
 import androidx.room.withTransaction
@@ -22,6 +29,7 @@ import kotlinx.coroutines.flow.Flow
  */
 class ConteoRepository(private val db: AppDatabase) {
 
+    // Referencias a todos los DAOs que necesita este repositorio.
     private val accesoDao = db.accesoDao()
     private val conteoDao = db.registroConteoDao()
     private val flujoDao = db.registroFlujoDao()
@@ -29,6 +37,8 @@ class ConteoRepository(private val db: AppDatabase) {
     private val movimientoDao = db.movimientoClienteDao()
 
     // ---------- Lecturas (Room, reactivas con Flow) ----------
+    // ---------- Lecturas reactivas (Flow) ----------
+    // Cada función solo delega en el DAO correspondiente.
     fun accesos(): Flow<List<Acceso>> = accesoDao.getAll()
     fun totalesConteo(desde: Long): Flow<List<TotalAcceso>> = conteoDao.totalesPorAcceso(desde)
     fun totalesFlujo(desde: Long): Flow<List<TotalAccesoTipo>> = flujoDao.totalesPorAccesoYTipo(desde)
@@ -37,11 +47,14 @@ class ConteoRepository(private val db: AppDatabase) {
     fun flujos(desde: Long): Flow<List<RegistroFlujo>> = flujoDao.getDesde(desde)
 
     // Movimientos de clientes
+    // Lecturas para el módulo de clientes y la tarjeta "Clientes vía app" del Dashboard.
     fun historialCliente(usuarioId: Int): Flow<List<MovimientoCliente>> = movimientoDao.historial(usuarioId)
     fun totalesMovimientos(desde: Long): Flow<List<TotalMovimiento>> = movimientoDao.totalesDesde(desde)
     fun clientesDentro(): Flow<Int> = movimientoDao.clientesDentro()
 
     // ---------- Escrituras ----------
+    // guardarFlujo: registro manual que hace el administrador en "Nuevo registro".
+    // Arma el objeto RegistroFlujo con la fecha actual y lo inserta.
     suspend fun guardarFlujo(accesoId: Int, tipo: TipoFlujo, rango: RangoEtario, cantidad: Int, fotoUri: String?) {
         flujoDao.insert(
             RegistroFlujo(
@@ -67,6 +80,11 @@ class ConteoRepository(private val db: AppDatabase) {
      *    Así el Dashboard (total, tránsito/compra) y la Segmentación cambian solos vía Flow.
      *  - La SALIDA no suma ingresos: solo cierra la visita.
      */
+    // registrarMovimiento: corazón de la integración cliente -> Dashboard.
+    // db.withTransaction { } ejecuta todo como UNA transacción SQLite: si algo falla,
+    // no se guarda nada (no quedan datos a medias).
+    // Devuelve un texto de error, o null si se guardó bien.
+    // "return@withTransaction" sale del bloque de la transacción devolviendo ese valor.
     suspend fun registrarMovimiento(
         usuarioId: Int,
         accesoId: Int,
@@ -79,6 +97,8 @@ class ConteoRepository(private val db: AppDatabase) {
             return@withTransaction "Solo los clientes registran ingresos y salidas"
         }
 
+        // Validación de secuencia: el cliente está "dentro" si su último movimiento fue
+        // INGRESO. No se permite Ingreso estando dentro ni Salida estando fuera.
         val dentro = movimientoDao.ultimo(usuarioId)?.tipoMovimiento == TipoMovimiento.INGRESO
         if (tipo == TipoMovimiento.INGRESO && dentro) {
             return@withTransaction "Ya tienes un ingreso abierto. Marca tu salida primero."
@@ -88,6 +108,7 @@ class ConteoRepository(private val db: AppDatabase) {
         }
 
         val ahora = System.currentTimeMillis()
+        // 1) Siempre se guarda el movimiento en la bitácora del cliente.
         movimientoDao.insert(
             MovimientoCliente(
                 usuarioId = usuarioId,
@@ -98,6 +119,11 @@ class ConteoRepository(private val db: AppDatabase) {
             )
         )
 
+        // 2) Solo en un INGRESO se alimentan las métricas del Dashboard:
+        //    - registro_conteo +1  -> suma al TOTAL de ingresos del acceso (como lo haría el sensor).
+        //    - registro_flujo  +1  -> ya CLASIFICADO con el motivo elegido y el rango etario del perfil.
+        // Como el Dashboard lee estas tablas con Flow, se actualiza automáticamente.
+        // La SALIDA no suma ingresos: solo cierra la visita.
         if (tipo == TipoMovimiento.INGRESO) {
             conteoDao.insert(
                 RegistroConteo(accesoId = accesoId, fechaHora = ahora, cantidad = 1, usuarioId = usuarioId)
@@ -117,6 +143,8 @@ class ConteoRepository(private val db: AppDatabase) {
     }
 
     /** Reemplaza los datos FICTICIOS por otros de los últimos 30 días (conserva los de clientes). */
+    // cargarInitializer: genera datos ficticios de 30 días y reemplaza los anteriores.
+    // Borra SOLO los ficticios (usuarioId IS NULL), así los registros de clientes se conservan.
     suspend fun cargarInitializer() {
         val (conteos, flujos) = DatosIniciales.generar()
         // withTransaction: o se guarda todo o no se guarda nada
@@ -129,6 +157,7 @@ class ConteoRepository(private val db: AppDatabase) {
     }
 
     /** Primera vez que se abre el Dashboard: si no hay datos ficticios, se generan automáticamente. */
+    // cargarSiEstaVacio: la primera vez (sin datos ficticios) los genera automáticamente.
     suspend fun cargarSiEstaVacio() {
         if (conteoDao.contarFicticios() == 0) cargarInitializer()
     }

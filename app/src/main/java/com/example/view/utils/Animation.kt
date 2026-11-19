@@ -1,3 +1,12 @@
+/*
+ * ARCHIVO: Animation.kt  (capa VIEW - animaciones)
+ * QUÉ HACE: reúne todas las animaciones de la app.
+ *  Generales: entrada de formularios y transición entre pantallas.
+ *  De CÁMARA (solo en el perfil): pulso del ícono, guía de rostro y destello.
+ * CÓMO: usa la API de animación de Compose: AnimatedVisibility (aparecer),
+ * rememberInfiniteTransition (animaciones en bucle) y Animatable (animación
+ * controlada paso a paso desde una corrutina).
+ */
 package com.example.view.utils
 
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -47,6 +56,9 @@ import androidx.navigation.NavBackStackEntry
 
 // 1) El contenido aparece con fade + deslizamiento vertical
 @Composable
+// AnimacionEntradaFormulario: cuando "visible" pasa a true, el contenido aparece con
+// fade (opacidad 0 -> 1) + deslizamiento desde abajo (it / 2 = media altura), 500 ms.
+// Las pantallas ponen visible = true en un LaunchedEffect al abrirse.
 fun AnimacionEntradaFormulario(
     visible: Boolean,
     content: @Composable AnimatedVisibilityScope.() -> Unit
@@ -59,6 +71,9 @@ fun AnimacionEntradaFormulario(
 }
 
 // 2) Deslizamiento horizontal entre pantallas
+// Transiciones del NavHost (AppNavegation): al avanzar, la pantalla nueva entra
+// desde la derecha y la anterior sale a la izquierda; al volver ("pop"), al revés.
+// Son lambdas con receptor AnimatedContentTransitionScope, el tipo que pide NavHost.
 private const val DURACION_NAV = 400
 
 val navEnterTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
@@ -86,6 +101,10 @@ val navPopExitTransition: AnimatedContentTransitionScope<NavBackStackEntry>.() -
 // Uso: Modifier.pulsoYRotacion()
 // ---------------------------------------------------------------------------
 @Composable
+// pulsoYRotacion: extensión de Modifier (se usa como Modifier.pulsoYRotacion()).
+// rememberInfiniteTransition anima dos valores en bucle infinito:
+//  escala 0.9 -> 1.1 y rotación -8° -> 8°; RepeatMode.Reverse va y vuelve.
+// graphicsLayer aplica la transformación al dibujar (sin recalcular el layout).
 fun Modifier.pulsoYRotacion(): Modifier {
     val transition = rememberInfiniteTransition(label = "pulsoYRotacion")
     val scale by transition.animateFloat(
@@ -112,6 +131,9 @@ fun Modifier.pulsoYRotacion(): Modifier {
 // para que el cliente encuadre su rostro.
 // ---------------------------------------------------------------------------
 @Composable
+// GuiaRostroAnimada: círculo punteado que "respira" (escala y opacidad en bucle).
+// Canvas dibuja directamente: drawCircle con Stroke (solo borde) y dashPathEffect
+// (trazos de 28 px con huecos de 18 px). El radio es el 36% del lado menor.
 fun GuiaRostroAnimada(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "guiaRostro")
     val escala by transition.animateFloat(
@@ -144,6 +166,10 @@ fun GuiaRostroAnimada(modifier: Modifier = Modifier) {
 // se pone blanca de golpe y se desvanece suavemente (350 ms), como un flash.
 // ---------------------------------------------------------------------------
 @Composable
+// DestelloObturador: flash blanco al tomar la foto.
+// Animatable guarda la opacidad. LaunchedEffect(disparos) se re-ejecuta cada vez que
+// "disparos" aumenta: snapTo(0.85) la pone blanca de golpe y animateTo(0) la
+// desvanece en 350 ms. Si la opacidad es 0, la capa ni siquiera se dibuja.
 fun DestelloObturador(disparos: Int, modifier: Modifier = Modifier) {
     val alpha = remember { Animatable(0f) }
     LaunchedEffect(disparos) {

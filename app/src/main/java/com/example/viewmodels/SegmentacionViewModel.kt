@@ -1,3 +1,10 @@
+/*
+ * ARCHIVO: SegmentacionViewModel.kt  (capa VIEWMODEL)
+ * QUÉ HACE: calcula el perfil etario de las personas que SOLO transitan,
+ * filtrado por periodo y por acceso.
+ * CÓMO: cuando cambia el periodo o el acceso, se repite la consulta en Room y se
+ * calcula el porcentaje de cada rango etario.
+ */
 package com.example.viewmodels
 
 import android.app.Application
@@ -15,6 +22,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 
+// FilaSegmento: una fila del gráfico (rango, cantidad y porcentaje 0..1).
 data class FilaSegmento(val rango: RangoEtario, val total: Int, val porcentaje: Float)
 
 data class SegmentacionUiState(
@@ -25,6 +33,7 @@ data class SegmentacionUiState(
     val filas: List<FilaSegmento> = emptyList()
 ) {
     /** Rango etario con más personas en tránsito (null si no hay datos). */
+    // predominante: el rango con más personas (maxByOrNull); null si no hay datos.
     val predominante: FilaSegmento? get() = if (totalTransito == 0) null else filas.maxByOrNull { it.total }
 }
 
@@ -38,9 +47,13 @@ class SegmentacionViewModel(application: Application) : AndroidViewModel(applica
     private val accesoId = MutableStateFlow(0)
 
     // Se vuelve a consultar Room cuando cambia el periodo o el acceso seleccionado
+    // datos: une periodo y acceso en un par (p, a) y, con flatMapLatest, consulta Room
+    // para esa combinación (cancelando la consulta anterior).
     private val datos = combine(periodo, accesoId) { p, a -> p to a }
         .flatMapLatest { (p, a) -> repository.segmentacion(a, p.desdeMillis()) }
 
+    // uiState: se listan TODOS los rangos (aunque tengan 0) para que la pantalla no
+    // "salte" al cambiar de filtro. porcentaje = total del rango / total en tránsito.
     val uiState: StateFlow<SegmentacionUiState> =
         combine(periodo, accesoId, repository.accesos(), datos) { p, a, accesos, filasBd ->
             val total = filasBd.sumOf { it.total }

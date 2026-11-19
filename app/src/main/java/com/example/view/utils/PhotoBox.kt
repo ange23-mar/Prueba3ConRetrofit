@@ -1,3 +1,10 @@
+/*
+ * ARCHIVO: PhotoBox.kt  (capa VIEW - componente)
+ * QUÉ HACE: recuadro de la foto de evidencia en "Nuevo registro" (administrador).
+ * CÓMO: si hay URI muestra la imagen con Coil (AsyncImage, recortada con Crop);
+ * si no, muestra un ícono y el texto "Tomar foto". Al tocarlo llama a onTakePhoto.
+ * Sin animaciones: las animaciones de cámara están solo en el perfil.
+ */
 package com.example.view.utils
 
 import androidx.compose.foundation.background
@@ -27,6 +34,7 @@ import coil.compose.AsyncImage
  * (ver FotoPerfilAnimada).
  */
 @Composable
+// Box con tamaño fijo, esquinas redondeadas (clip), fondo gris y clickable.
 fun PhotoBox(imageUri: String?, onTakePhoto: () -> Unit) {
     Box(
         modifier = Modifier

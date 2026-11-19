@@ -1,3 +1,10 @@
+/*
+ * ARCHIVO: DatosIniciales.kt  (capa DATA)
+ * QUÉ HACE: genera datos FICTICIOS de 30 días para que el Dashboard tenga información
+ * (la guía del caso prohíbe usar datos reales del sistema de conteo).
+ * CÓMO: usa Random con semilla fija (42): siempre produce exactamente los mismos
+ * números, lo que facilita explicar y verificar los resultados.
+ */
 package com.example.repository.data
 
 import com.example.repository.models.RangoEtario
@@ -17,10 +24,14 @@ import kotlin.random.Random
  */
 object DatosIniciales {
 
+    // Supuestos del negocio: personas promedio por lectura en cada acceso y qué
+    // porcentaje de ellas solo transita (el resto compra).
     private val ingresosBase = mapOf(1 to 220, 2 to 160, 3 to 190, 4 to 90)      // por franja horaria
     private val porcentajeTransito = mapOf(1 to 0.62, 2 to 0.55, 3 to 0.72, 4 to 0.40)
 
     // Peso (%) de cada rango etario dentro de cada tipo de flujo
+    // Pesos (%) de cada rango etario dentro de cada tipo de flujo.
+    // linkedMapOf mantiene el orden de inserción (importante para el reparto).
     private val pesosTransito = linkedMapOf(
         RangoEtario.MENOR_18 to 14, RangoEtario.ADULTO_18_29 to 30, RangoEtario.ADULTO_30_44 to 24,
         RangoEtario.ADULTO_45_59 to 16, RangoEtario.MAYOR_60 to 10, RangoEtario.SIN_DATO to 6
@@ -30,8 +41,11 @@ object DatosIniciales {
         RangoEtario.ADULTO_45_59 to 24, RangoEtario.MAYOR_60 to 12, RangoEtario.SIN_DATO to 4
     )
 
+    // Dos lecturas por día en cada acceso: 13:00 y 19:00.
     private val horasDeConteo = listOf(13, 19) // dos lecturas por día en cada acceso
 
+    // generar: recorre días x horas x accesos y arma las listas de RegistroConteo y
+    // RegistroFlujo. Devuelve un Pair (conteos, flujos).
     fun generar(
         dias: Int = 30,
         ahora: Long = System.currentTimeMillis()
@@ -46,9 +60,11 @@ object DatosIniciales {
             val fecha = hoy.minusDays(d.toLong())
             for (hora in horasDeConteo) {
                 val ts = fecha.atTime(hora, 0).atZone(zona).toInstant().toEpochMilli()
+                // No se generan lecturas en el futuro (ej. la de las 19:00 si aún es mediodía).
                 if (ts > ahora) continue // no generar lecturas en el futuro
 
                 for (accesoId in 1..4) {
+                    // Variación aleatoria de ±20% sobre la base; se separa en tránsito y compra.
                     val total = (ingresosBase.getValue(accesoId) * (0.8 + random.nextDouble() * 0.4)).toInt()
                     val transito = (total * porcentajeTransito.getValue(accesoId)).toInt()
                     val compra = total - transito
@@ -62,6 +78,9 @@ object DatosIniciales {
         return conteos to flujos
     }
 
+    // agregarFlujos: reparte un total entre los rangos etarios según sus pesos.
+    // El último rango recibe "lo que sobra" para que la suma sea exactamente igual al
+    // total (evita errores de redondeo de la división entera).
     private fun agregarFlujos(
         destino: MutableList<RegistroFlujo>,
         accesoId: Int,

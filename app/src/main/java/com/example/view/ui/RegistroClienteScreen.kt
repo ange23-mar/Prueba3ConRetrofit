@@ -1,3 +1,10 @@
+/*
+ * ARCHIVO: RegistroClienteScreen.kt  (capa VIEW - pantalla)
+ * QUÉ HACE: formulario para crear una cuenta de CLIENTE (nombre, email, contraseña,
+ * tipo de cliente y rango etario).
+ * CÓMO: los valores escritos se guardan en estado local (rememberSaveable); al presionar
+ * "Crear cuenta" se envían al UsuarioViewModel, que valida e inserta.
+ */
 package com.example.view.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -40,9 +47,13 @@ fun RegistroClienteScreen(
     onRegistrado: (email: String) -> Unit,
     onCancelar: () -> Unit
 ) {
+    // collectAsStateWithLifecycle: convierte el StateFlow del ViewModel en estado de Compose.
+    // Cada vez que cambia, la pantalla se "recompone" (se redibuja) con los datos nuevos.
+    // "WithLifecycle": deja de observar si la app pasa a segundo plano (ahorra batería).
     val mensaje by viewModel.message.collectAsStateWithLifecycle()
     val guardando by viewModel.guardando.collectAsStateWithLifecycle()
 
+    // Estado local de cada campo. rememberSaveable lo conserva al rotar la pantalla.
     var nombre by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -53,6 +64,8 @@ fun RegistroClienteScreen(
 
     LaunchedEffect(Unit) { visible = true }
     // Limpia mensajes antiguos al salir de la pantalla
+    // DisposableEffect + onDispose: al salir de la pantalla limpia el mensaje de error,
+    // para que no aparezca de nuevo la próxima vez que se abra.
     DisposableEffect(Unit) { onDispose { viewModel.clearMessage() } }
 
     AnimacionEntradaFormulario(visible = visible) {
@@ -101,6 +114,8 @@ fun RegistroClienteScreen(
 
             Text("Tipo de cliente", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Un FilterChip por cada tipo de cliente (entries = todos los valores del enum).
+                // El chip marcado es el que coincide con tipoCliente.
                 TipoFlujo.entries.forEach { t ->
                     FilterChip(
                         selected = tipoCliente == t,
@@ -110,6 +125,7 @@ fun RegistroClienteScreen(
                 }
             }
 
+            // Desplegable genérico (Componentes.kt) con todos los rangos etarios.
             CampoSelector(
                 etiqueta = "Rango etario",
                 valorActual = rango.etiqueta,
@@ -122,6 +138,7 @@ fun RegistroClienteScreen(
 
             Button(
                 onClick = {
+                    // Envía los datos; onRegistrado se ejecutará solo si se guardó correctamente.
                     viewModel.registrarCliente(
                         nombre, email, password, confirmacion, tipoCliente, rango, onRegistrado
                     )

@@ -1,3 +1,11 @@
+/*
+ * ARCHIVO: ClienteMovimientoScreen.kt  (capa VIEW - pantalla principal del CLIENTE)
+ * QUÉ HACE: el cliente ve si está dentro o fuera de la tienda, elige acceso y motivo
+ * ("Solo transita" / "Compra") y marca su Ingreso o Salida. Abajo ve su historial.
+ * CÓMO: observa MovimientoUiState. Los botones se habilitan según el estado:
+ * fuera -> solo "Ingreso"; dentro -> solo "Salida". Cada registro se guarda en Room
+ * y además alimenta el Dashboard del administrador (ver ConteoRepository).
+ */
 package com.example.view.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -47,12 +55,19 @@ import com.example.viewmodels.MovimientoViewModel
 /** Interfaz principal del CLIENTE: marcar Ingreso / Salida con su motivo y ver su historial. */
 @Composable
 fun ClienteMovimientosScreen(viewModel: MovimientoViewModel, usuario: Usuario?) {
+    // collectAsStateWithLifecycle: convierte el StateFlow del ViewModel en estado de Compose.
+    // Cada vez que cambia, la pantalla se "recompone" (se redibuja) con los datos nuevos.
+    // "WithLifecycle": deja de observar si la app pasa a segundo plano (ahorra batería).
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val ultimo = state.ultimo
 
     // Valores preseleccionados (se recalculan tras cada movimiento y sobreviven a rotaciones):
     //  - Si está dentro: el acceso y motivo de su ingreso.
     //  - Si está fuera: el tipo de cliente de su perfil.
+    // rememberSaveable(clave): si la clave cambia (nuevo movimiento), el valor se
+    // reinicia con el bloque inicial. Así, tras marcar Ingreso, para la Salida se
+    // preseleccionan el mismo acceso y motivo; estando fuera, el motivo sugerido es el
+    // tipo de cliente del perfil.
     var accesoId by rememberSaveable(ultimo?.id) {
         mutableStateOf(if (state.dentro) ultimo?.accesoId else null)
     }
@@ -60,8 +75,11 @@ fun ClienteMovimientosScreen(viewModel: MovimientoViewModel, usuario: Usuario?) 
         mutableStateOf(if (state.dentro) ultimo?.motivo else usuario?.tipoCliente)
     }
 
+    // Función local: traduce un accesoId a su nombre usando la lista de accesos.
     fun nombreAcceso(id: Int) = state.accesos.firstOrNull { it.id == id }?.nombreAcceso ?: "Acceso $id"
 
+    // LazyColumn: lista que solo dibuja los elementos visibles (eficiente con historiales largos).
+    // Cada item { } es un bloque de la pantalla.
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -74,6 +92,7 @@ fun ClienteMovimientosScreen(viewModel: MovimientoViewModel, usuario: Usuario?) 
             }
         }
 
+        // Tarjeta de estado: color y texto cambian según state.dentro.
         // Estado actual: dentro / fuera de la tienda
         item {
             Card(
@@ -102,6 +121,7 @@ fun ClienteMovimientosScreen(viewModel: MovimientoViewModel, usuario: Usuario?) 
             }
         }
 
+        // Formulario: selector de acceso + chips de motivo + botones Ingreso/Salida.
         // Formulario de registro
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -134,6 +154,7 @@ fun ClienteMovimientosScreen(viewModel: MovimientoViewModel, usuario: Usuario?) 
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
+                        // Ingreso: habilitado solo si está fuera y no hay un registro en proceso.
                         onClick = { viewModel.registrar(TipoMovimiento.INGRESO, accesoId, motivo) },
                         enabled = !state.dentro && !state.procesando,
                         modifier = Modifier.weight(1f).height(52.dp)
@@ -143,6 +164,7 @@ fun ClienteMovimientosScreen(viewModel: MovimientoViewModel, usuario: Usuario?) 
                         Text("Ingreso")
                     }
                     Button(
+                        // Salida: habilitado solo si está dentro. Usa el color terciario para diferenciarse.
                         onClick = { viewModel.registrar(TipoMovimiento.SALIDA, accesoId, motivo) },
                         enabled = state.dentro && !state.procesando,
                         colors = ButtonDefaults.buttonColors(
@@ -157,6 +179,7 @@ fun ClienteMovimientosScreen(viewModel: MovimientoViewModel, usuario: Usuario?) 
                     }
                 }
 
+                // Mensaje de resultado: rojo si es error, color primario si fue exitoso.
                 state.aviso?.let { aviso ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -176,6 +199,8 @@ fun ClienteMovimientosScreen(viewModel: MovimientoViewModel, usuario: Usuario?) 
         if (state.historial.isEmpty()) {
             item { Text("Aún no registras movimientos.", style = MaterialTheme.typography.bodyMedium) }
         } else {
+            // items con key: Compose identifica cada fila por su id; al agregar un movimiento
+            // no redibuja toda la lista, solo inserta la nueva fila.
             items(state.historial, key = { it.id }) { mov ->
                 FilaMovimiento(mov, nombreAcceso(mov.accesoId))
             }
@@ -184,6 +209,7 @@ fun ClienteMovimientosScreen(viewModel: MovimientoViewModel, usuario: Usuario?) 
 }
 
 @Composable
+// FilaMovimiento: tarjeta de un movimiento (ícono, tipo, acceso, motivo y fecha).
 private fun FilaMovimiento(mov: MovimientoCliente, nombreAcceso: String) {
     val esIngreso = mov.tipoMovimiento == TipoMovimiento.INGRESO
     Card(modifier = Modifier.fillMaxWidth()) {

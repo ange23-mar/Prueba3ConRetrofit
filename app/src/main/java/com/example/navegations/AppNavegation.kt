@@ -1,3 +1,13 @@
+/*
+ * ARCHIVO: AppNavegation.kt  (capa VIEW - navegación)
+ * QUÉ HACE: define las rutas, los menús por rol, la protección de rutas, el menú
+ * lateral, la barra superior y el NavHost con todas las pantallas.
+ * CÓMO: Navigation Compose. Cada pantalla tiene una "ruta" (texto). navController
+ * navega entre rutas y guarda la pila de pantallas (back stack). El ROL del usuario
+ * logueado decide qué menú y qué pantallas puede ver:
+ *    ADMINISTRADOR -> Dashboard, Perfil de tránsito, Registros.
+ *    CLIENTE       -> Ingreso / Salida, Mi perfil.
+ */
 package com.example.navegations
 
 import androidx.compose.foundation.layout.Column
@@ -73,6 +83,7 @@ import com.example.viewmodels.UsuarioViewModel
 import kotlinx.coroutines.launch
 
 /** Rutas de navegación */
+// Routes: nombres de las rutas en un solo lugar (evita errores de tipeo).
 object Routes {
     // Públicas
     const val LOGIN = "login"
@@ -88,22 +99,27 @@ object Routes {
     const val CLIENTE_MOVIMIENTOS = "cliente_movimientos"
     const val CLIENTE_PERFIL = "cliente_perfil"
 
+    // Conjuntos de rutas por tipo de usuario: se usan para validar permisos.
     val publicas = setOf(LOGIN, REGISTRO)
     val administrador = setOf(DASHBOARD, SEGMENTACION, FLUJOS, FLUJO_FORM)
     val cliente = setOf(CLIENTE_MOVIMIENTOS, CLIENTE_PERFIL)
 
     /** Pantalla inicial según el rol: Dashboard para admin, Ingreso/Salida para cliente. */
+    // inicioPara: pantalla de inicio según el rol (aquí se cumple el flujo pedido:
+    // admin -> Dashboard existente; cliente -> interfaz de cliente).
     fun inicioPara(rol: RolUsuario): String = when (rol) {
         RolUsuario.ADMINISTRADOR -> DASHBOARD
         RolUsuario.CLIENTE -> CLIENTE_MOVIMIENTOS
     }
 
+    // permitida: true si la ruta pertenece al rol (un cliente no puede abrir el Dashboard).
     fun permitida(route: String, rol: RolUsuario): Boolean = when (rol) {
         RolUsuario.ADMINISTRADOR -> route in administrador
         RolUsuario.CLIENTE -> route in cliente
     }
 }
 
+// MenuItem: una opción del menú lateral (ruta, texto e ícono).
 data class MenuItem(val route: String, val label: String, val icon: ImageVector)
 
 /** Menú lateral del ADMINISTRADOR (Dashboard existente) */
@@ -119,12 +135,14 @@ val menuCliente = listOf(
     MenuItem(Routes.CLIENTE_PERFIL, "Mi perfil", Icons.Default.AccountCircle)
 )
 
+// menuPara: devuelve el menú del rol; sin sesión, lista vacía.
 fun menuPara(rol: RolUsuario?): List<MenuItem> = when (rol) {
     RolUsuario.ADMINISTRADOR -> menuAdministrador
     RolUsuario.CLIENTE -> menuCliente
     null -> emptyList()
 }
 
+// titleFor: título de la barra superior según la pantalla actual.
 private fun titleFor(route: String?): String = when (route) {
     Routes.REGISTRO -> "Registro de cliente"
     Routes.DASHBOARD -> "Resumen por acceso"
@@ -147,29 +165,44 @@ fun AppNavigation(
     perfilViewModel: PerfilViewModel,
     movimientoViewModel: MovimientoViewModel
 ) {
+    // navController: controla la navegación. rememberNavController lo conserva entre recomposiciones.
+    // drawerState: abierto/cerrado del menú lateral. scope: para abrir/cerrar el menú
+    // (son funciones suspend y necesitan una corrutina).
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    // currentRoute: ruta de la pantalla visible; se actualiza en cada navegación.
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    // sesion: usuario logueado (null = sin sesión).
     val loginState by loginViewModel.uiState.collectAsStateWithLifecycle()
     val sesion = loginState.loggedUser
     // Versión reactiva del usuario (refleja foto/tipo de cliente actualizados).
     // Se valida el id para no mostrar datos de una sesión anterior.
     val perfil by perfilViewModel.usuario.collectAsStateWithLifecycle()
+    // usuarioActual: versión "en vivo" desde Room (con la foto más reciente). takeIf evita
+    // mostrar por un instante los datos de una sesión anterior.
     val usuarioActual: Usuario? = perfil?.takeIf { it.id == sesion?.id } ?: sesion
 
+    // isTopLevel: true en pantallas del menú (muestra ícono ☰); false en subpantallas (muestra ←).
     val menu = menuPara(sesion?.rol)
     val isTopLevel = menu.any { it.route == currentRoute }
 
     // Los ViewModels del cliente siguen a la sesión activa
+    // Cada vez que cambia el usuario de la sesión, se informa a los ViewModels del cliente
+    // para que consulten los datos de ESE usuario (o se limpien al cerrar sesión).
     LaunchedEffect(sesion?.id) {
         perfilViewModel.setUsuario(sesion?.id)
         movimientoViewModel.setUsuario(sesion?.id)
     }
 
     // Protección de rutas: sin sesión -> Login; rol sin permiso -> su pantalla de inicio
+    // Protección de rutas (se evalúa al cambiar la sesión o la pantalla):
+    //  - sin sesión en una ruta privada -> al Login.
+    //  - ruta de otro rol -> a la pantalla de inicio de su rol.
+    // popUpTo(graph.id) inclusive vacía la pila para que "atrás" no regrese a la ruta bloqueada.
+    // launchSingleTop evita apilar dos veces la misma pantalla.
     LaunchedEffect(sesion, currentRoute) {
         val route = currentRoute ?: return@LaunchedEffect
         if (route in Routes.publicas) return@LaunchedEffect
@@ -185,6 +218,8 @@ fun AppNavigation(
         }
     }
 
+    // navigateTopLevel: navegación desde el menú. popUpTo(inicio) evita que la pila crezca
+    // infinitamente al saltar entre opciones del menú.
     fun navigateTopLevel(route: String) {
         val inicio = sesion?.let { Routes.inicioPara(it.rol) } ?: return
         navController.navigate(route) {
@@ -193,6 +228,7 @@ fun AppNavigation(
         }
     }
 
+    // cerrarSesion: cierra el menú, borra la sesión y vuelve al Login limpiando la pila.
     fun cerrarSesion() {
         scope.launch { drawerState.close() }
         loginViewModel.logout()
@@ -202,6 +238,8 @@ fun AppNavigation(
         }
     }
 
+    // ModalNavigationDrawer: menú lateral deslizable. El gesto solo se habilita en pantallas
+    // de primer nivel (en formularios se usa la flecha atrás).
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = isTopLevel,
@@ -210,6 +248,7 @@ fun AppNavigation(
                 Spacer(Modifier.height(16.dp))
                 CabeceraMenu(usuarioActual)
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                // Una opción por cada elemento del menú del rol; la seleccionada se resalta.
                 menu.forEach { item ->
                     NavigationDrawerItem(
                         label = { Text(item.label) },
@@ -233,8 +272,10 @@ fun AppNavigation(
             }
         }
     ) {
+        // Scaffold: estructura base de la pantalla (barra superior + contenido).
         Scaffold(
             topBar = {
+                // La barra superior se oculta en el Login. Muestra ☰ (abrir menú) o ← (volver).
                 if (currentRoute != null && currentRoute != Routes.LOGIN) {
                     TopAppBar(
                         title = { Text(titleFor(currentRoute)) },
@@ -256,6 +297,7 @@ fun AppNavigation(
                 }
             }
         ) { innerPadding ->
+            // innerPadding: margen que deja el Scaffold para no tapar el contenido con la barra.
             AppNavHost(
                 navController = navController,
                 modifier = Modifier.padding(innerPadding),
@@ -274,6 +316,7 @@ fun AppNavigation(
 
 /** Cabecera del menú lateral: foto de perfil (si existe), nombre, email y rol. */
 @Composable
+// CabeceraMenu: foto (Coil) o ícono, nombre, email y rol en la parte superior del menú.
 private fun CabeceraMenu(usuario: Usuario?) {
     Row(
         modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
@@ -316,6 +359,8 @@ private fun AppNavHost(
     usuarioActual: Usuario?
 ) {
     // Transiciones de deslizamiento definidas en view/utils/Animations.kt
+    // NavHost: asocia cada ruta con su pantalla. startDestination = LOGIN: la app siempre
+    // empieza en el inicio de sesión. Las transiciones vienen de Animation.kt.
     NavHost(
         navController = navController,
         startDestination = Routes.LOGIN,
@@ -326,6 +371,8 @@ private fun AppNavHost(
         popExitTransition = navPopExitTransition
     ) {
         // ---------- Públicas ----------
+        // Login exitoso -> pantalla de inicio de su ROL. popUpTo(LOGIN) inclusive saca el login
+        // de la pila (así "atrás" no vuelve al login estando con sesión).
         composable(Routes.LOGIN) {
             LoginScreen(
                 viewModel = loginViewModel,
@@ -338,6 +385,7 @@ private fun AppNavHost(
                 onRegistrarse = { navController.navigate(Routes.REGISTRO) }
             )
         }
+        // Registro exitoso -> precarga el email en el login y vuelve atrás.
         composable(Routes.REGISTRO) {
             RegistroClienteScreen(
                 viewModel = usuarioViewModel,
@@ -350,6 +398,7 @@ private fun AppNavHost(
         }
 
         // ---------- ADMINISTRADOR ----------
+        // Pantallas del ADMINISTRADOR.
         composable(Routes.DASHBOARD) { DashboardScreen(dashboardViewModel) }
         composable(Routes.SEGMENTACION) { SegmentacionScreen(segmentacionViewModel) }
         composable(Routes.FLUJOS) {
@@ -366,6 +415,7 @@ private fun AppNavHost(
         }
 
         // ---------- CLIENTE ----------
+        // Pantallas del CLIENTE.
         composable(Routes.CLIENTE_MOVIMIENTOS) {
             ClienteMovimientosScreen(viewModel = movimientoViewModel, usuario = usuarioActual)
         }

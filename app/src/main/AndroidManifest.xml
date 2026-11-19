@@ -8,6 +8,8 @@
 
     <!-- Permiso de cámara (también se solicita en tiempo de ejecución) -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- PERMISO Y DEPENDENCIA DE RETROFT -->
 
     <application
         android:allowBackup="true"

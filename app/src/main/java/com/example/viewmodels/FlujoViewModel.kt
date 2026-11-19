@@ -1,3 +1,8 @@
+/*
+ * ARCHIVO: FlujoViewModel.kt  (capa VIEWMODEL)
+ * QUÉ HACE: lista, crea y elimina registros de flujo (pantallas "Registros" y
+ * "Nuevo registro" del administrador).
+ */
 package com.example.viewmodels
 
 import android.app.Application
@@ -20,6 +25,11 @@ class FlujoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = ConteoRepository(AppDatabase.getDatabase(application))
 
+    // stateIn convierte el Flow de Room en un StateFlow (siempre tiene un valor actual):
+    //  - viewModelScope: la recolección vive mientras viva el ViewModel.
+    //  - WhileSubscribed(5000): deja de consultar Room 5 s después de que la pantalla
+    //    deja de observar (ahorra recursos, pero sobrevive a una rotación rápida).
+    //  - El último parámetro es el valor inicial mientras llega el primer dato.
     val accesos: StateFlow<List<Acceso>> = repository.accesos()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -32,6 +42,9 @@ class FlujoViewModel(application: Application) : AndroidViewModel(application) {
      * CREATE. Valida y devuelve un mensaje de error, o null si todo está bien
      * (en ese caso el guardado ocurre en segundo plano).
      */
+    // guardar: valida en el hilo principal y devuelve el error de inmediato (String) para
+    // mostrarlo en el formulario. Si todo está bien devuelve null y guarda en segundo
+    // plano (Dispatchers.IO). "?: return" sale de la función si la cantidad no es válida.
     fun guardar(accesoId: Int?, tipo: TipoFlujo, rango: RangoEtario, cantidadTexto: String, fotoUri: String?): String? {
         if (accesoId == null) return "Seleccione un acceso"
         val cantidad = Validaciones.cantidadValida(cantidadTexto)
@@ -44,6 +57,7 @@ class FlujoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // DELETE
+    // eliminar: borra en hilo IO; la lista se actualiza sola porque es un Flow de Room.
     fun eliminar(registro: RegistroFlujo) {
         viewModelScope.launch(Dispatchers.IO) { repository.eliminarFlujo(registro) }
     }

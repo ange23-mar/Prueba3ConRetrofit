@@ -1,3 +1,12 @@
+/*
+ * ARCHIVO: Theme.kt  (capa VIEW - tema visual)
+ * QUÉ HACE: define los colores de la app (Material Design 3) en modo claro y oscuro.
+ * CÓMO: lightColorScheme / darkColorScheme crean paletas completas a partir de unos
+ * pocos colores. AppTheme elige una u otra con isSystemInDarkTheme().
+ * Toda la UI lee estos colores con MaterialTheme.colorScheme.
+ * Nota: este tema de Compose reemplaza al de res/values/themes.xml, que solo se usa
+ * mientras la Activity arranca.
+ */
 package com.example.view.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -21,6 +30,7 @@ private val DarkColors = darkColorScheme(
 )
 
 @Composable
+// AppTheme envuelve toda la UI (ver MainActivity) y entrega el esquema de colores.
 fun AppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,

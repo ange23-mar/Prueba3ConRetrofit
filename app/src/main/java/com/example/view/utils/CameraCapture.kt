@@ -1,3 +1,12 @@
+/*
+ * ARCHIVO: CameraCapture.kt  (capa VIEW - componente reutilizable)
+ * QUÉ HACE: pantalla de cámara con CameraX 1.3.4: pide permiso, muestra la vista
+ * previa en vivo, cambia de lente y guarda la foto en el almacenamiento interno.
+ * CÓMO: CameraX es una librería de Views (no de Compose). Se integra con
+ * AndroidView (que incrusta una View clásica dentro de Compose) y se "vincula" al
+ * ciclo de vida de la pantalla para encender y apagar la cámara automáticamente.
+ * La usan: FlujoFormScreen (sin animaciones) y PerfilScreen (con animaciones).
+ */
 package com.example.view.utils
 
 import android.Manifest
@@ -65,6 +74,12 @@ import java.io.File
  * que agrega la guía circular animada sobre la vista previa en vivo y el destello de obturador.
  */
 @Composable
+// Parámetros:
+//  carpeta          -> subcarpeta donde se guarda la foto.
+//  onImageCaptured  -> callback con la URI de la foto guardada.
+//  onClose          -> callback para cerrar la cámara.
+//  camaraFrontal    -> el perfil abre con la cámara frontal (selfie).
+//  animarCaptura    -> activa las animaciones (solo el perfil lo pone en true).
 fun CameraCapture(
     carpeta: String, // subcarpeta dentro de files/fotos (ej. "registros", "perfil")
     onImageCaptured: (Uri) -> Unit,
@@ -74,21 +89,28 @@ fun CameraCapture(
     animarCaptura: Boolean = false  // animaciones de cámara: solo en el perfil
 ) {
     val context = LocalContext.current
+    // hasPermission: ¿ya se concedió el permiso CAMERA? Se revisa al entrar.
+    // remember conserva el valor entre recomposiciones.
     var hasPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
                     PackageManager.PERMISSION_GRANTED
         )
     }
+    // permissionLauncher: muestra el diálogo del sistema para pedir el permiso y
+    // recibe la respuesta (granted = true/false) en onResult.
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { granted -> hasPermission = granted }
     )
 
+    // LaunchedEffect(Unit): se ejecuta una sola vez al mostrar el componente:
+    // si falta el permiso, lo solicita automáticamente.
     LaunchedEffect(Unit) {
         if (!hasPermission) permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
+    // Con permiso -> vista previa. Sin permiso -> mensaje y botón para volver a pedirlo.
     if (hasPermission) {
         CameraPreviewContent(carpeta, onImageCaptured, onClose, modifier, camaraFrontal, animarCaptura)
     } else {
@@ -109,6 +131,7 @@ fun CameraCapture(
 }
 
 @Composable
+// CameraPreviewContent: la cámara propiamente tal.
 private fun CameraPreviewContent(
     carpeta: String,
     onImageCaptured: (Uri) -> Unit,
@@ -118,16 +141,23 @@ private fun CameraPreviewContent(
     animarCaptura: Boolean
 ) {
     val context = LocalContext.current
+    // lifecycleOwner: ciclo de vida de la pantalla actual. CameraX lo usa para apagar
+    // la cámara si la app pasa a segundo plano y encenderla al volver.
     val lifecycleOwner = LocalLifecycleOwner.current
+    // lensFacing: lente actual (frontal o trasera). Al cambiarlo se re-vincula la cámara.
     var lensFacing by remember {
         mutableIntStateOf(
             if (camaraFrontal) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
         )
     }
 
+    // previewView: View de CameraX donde se dibuja la imagen en vivo.
+    // FILL_CENTER llena el espacio recortando los bordes (sin franjas negras).
     val previewView = remember {
         PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
     }
+    // imageCapture: "caso de uso" de CameraX para tomar fotos.
+    // MINIMIZE_LATENCY prioriza la rapidez del disparo sobre la máxima calidad.
     val imageCapture = remember {
         ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
@@ -135,6 +165,14 @@ private fun CameraPreviewContent(
     }
 
     // Vincula la cámara al ciclo de vida; se vuelve a ejecutar al cambiar de lente.
+    // DisposableEffect(lensFacing): se ejecuta al entrar y cada vez que cambia el lente.
+    // 1) ProcessCameraProvider.getInstance obtiene el proveedor de cámara (asíncrono).
+    // 2) addListener espera a que esté listo y, en el hilo principal:
+    //    - crea el caso de uso Preview y lo conecta a previewView (surfaceProvider),
+    //    - elige el lente (si el pedido no existe, usa el otro: útil en emuladores),
+    //    - unbindAll() suelta usos anteriores y bindToLifecycle() enciende la cámara
+    //      con Preview + ImageCapture ligados al ciclo de vida.
+    // 3) onDispose: al salir de la pantalla libera la cámara (unbindAll).
     DisposableEffect(lensFacing) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
@@ -161,17 +199,21 @@ private fun CameraPreviewContent(
     }
 
     // Contador de capturas: dispara el destello de obturador (solo si animarCaptura)
+    // disparos: contador de fotos tomadas; cada incremento dispara el destello animado.
     var disparos by remember { mutableIntStateOf(0) }
 
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+        // AndroidView: incrusta la PreviewView (View clásica) dentro de la UI de Compose.
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
 
         // Animaciones de cámara del PERFIL (ver Animations.kt): guía de rostro + flash
+        // Solo en el perfil: guía circular animada + destello de obturador (Animation.kt).
         if (animarCaptura) {
             GuiaRostroAnimada()
             DestelloObturador(disparos)
         }
 
+        // Botón X (arriba a la izquierda) para cerrar la cámara.
         IconButton(
             onClick = onClose,
             modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
@@ -179,6 +221,8 @@ private fun CameraPreviewContent(
             Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = Color.White)
         }
 
+        // Barra inferior: [espacio] [botón disparar] [botón cambiar cámara].
+        // El Spacer izquierdo mantiene centrado el botón de disparo.
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -188,6 +232,7 @@ private fun CameraPreviewContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Spacer(Modifier.size(56.dp))
+            // Botón de disparo: cuenta el disparo (animación) y llama a takePhoto.
             FilledIconButton(
                 onClick = {
                     if (animarCaptura) disparos++ // dispara el destello (solo perfil)
@@ -200,6 +245,7 @@ private fun CameraPreviewContent(
             ) {
                 Icon(Icons.Default.PhotoCamera, contentDescription = "Capturar", modifier = Modifier.size(36.dp))
             }
+            // Botón que alterna entre lente trasero y frontal (dispara el DisposableEffect).
             IconButton(
                 onClick = {
                     lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK)
@@ -213,6 +259,7 @@ private fun CameraPreviewContent(
     }
 }
 
+// tieneCamara: pregunta a CameraX si existe ese lente; cualquier error = "no existe".
 private fun tieneCamara(provider: ProcessCameraProvider, selector: CameraSelector): Boolean =
     try {
         provider.hasCamera(selector)
@@ -227,6 +274,12 @@ private fun tieneCamara(provider: ProcessCameraProvider, selector: CameraSelecto
  * - Otras apps no pueden leerla; no requiere permisos de almacenamiento.
  * - Se elimina al desinstalar la app y está excluida del respaldo (backup_rules.xml y data_extraction_rules.xml).
  */
+// takePhoto:
+// 1) Crea la carpeta files/fotos/<carpeta> (mkdirs no falla si ya existe).
+// 2) Nombre único con la hora actual: img_<milisegundos>.jpg.
+// 3) takePicture guarda la imagen en ese archivo; el callback se ejecuta en el
+//    hilo principal (getMainExecutor) para poder tocar la UI.
+// 4) onImageSaved entrega la URI "file://..." a quien llamó; onError muestra un Toast.
 private fun takePhoto(context: Context, carpeta: String, imageCapture: ImageCapture, onImageCaptured: (Uri) -> Unit) {
     val dir = File(context.filesDir, "fotos/$carpeta").apply { mkdirs() }
     val outputFile = File(dir, "img_${System.currentTimeMillis()}.jpg")

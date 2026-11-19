@@ -1,3 +1,9 @@
+/*
+ * ARCHIVO: UsuarioViewModel.kt  (capa VIEWMODEL)
+ * QUÉ HACE: registra nuevas cuentas de CLIENTE desde la pantalla de registro.
+ * CÓMO: valida los datos con Validaciones, crea el Usuario con rol CLIENTE y lo
+ * inserta con el repositorio. Los errores se exponen en el StateFlow "message".
+ */
 package com.example.viewmodels
 
 import android.app.Application
@@ -22,15 +28,19 @@ class UsuarioViewModel(application: Application) : AndroidViewModel(application)
 
     private val repository = UsuarioRepository(AppDatabase.getDatabase(application))
 
+    // message: texto de error para mostrar bajo el formulario (null = sin error).
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    // guardando: true mientras se inserta; la vista deshabilita el botón para evitar doble envío.
     private val _guardando = MutableStateFlow(false)
     val guardando: StateFlow<Boolean> = _guardando.asStateFlow()
 
     fun clearMessage() { _message.value = null }
 
     /** onSuccess recibe el email registrado (se usa para precargar el login). */
+    // registrarCliente: onSuccess es un "callback": la vista decide qué hacer al terminar
+    // (en AppNavigation: precargar el email en el login y volver atrás).
     fun registrarCliente(
         nombre: String,
         email: String,
@@ -41,6 +51,8 @@ class UsuarioViewModel(application: Application) : AndroidViewModel(application)
         onSuccess: (String) -> Unit
     ) {
         val emailLimpio = email.trim().lowercase()
+        // when sin argumento evalúa condiciones en orden y devuelve el primer mensaje que aplica.
+        // Si ninguna aplica, error = null (datos válidos).
         val error = when {
             !Validaciones.esSoloLetras(nombre) ->
                 "El nombre solo puede contener letras y un espacio entre palabras"
@@ -55,6 +67,10 @@ class UsuarioViewModel(application: Application) : AndroidViewModel(application)
             return
         }
 
+        // try/catch/finally:
+        //  - try: inserta en un hilo IO. El rol se fija en CLIENTE (desde la app no se crean admins).
+        //  - catch SQLiteConstraintException: el índice único de email rechazó un duplicado.
+        //  - finally: siempre se apaga el indicador "guardando", haya error o no.
         viewModelScope.launch {
             _guardando.value = true
             try {

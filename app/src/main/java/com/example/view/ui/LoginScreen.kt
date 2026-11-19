@@ -1,3 +1,10 @@
+/*
+ * ARCHIVO: LoginScreen.kt  (capa VIEW - pantalla)
+ * QUÉ HACE: formulario de inicio de sesión ÚNICO para administradores y clientes.
+ * CÓMO: la pantalla no decide nada: muestra el estado del LoginViewModel y le avisa
+ * cada acción. Cuando hay usuario logueado, entrega ese usuario a AppNavegation
+ * (onLoginSuccess), que elige la interfaz según su rol.
+ */
 package com.example.view.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -46,12 +53,21 @@ fun LoginScreen(
     onLoginSuccess: (Usuario) -> Unit,
     onRegistrarse: () -> Unit
 ) {
+    // collectAsStateWithLifecycle: convierte el StateFlow del ViewModel en estado de Compose.
+    // Cada vez que cambia, la pantalla se "recompone" (se redibuja) con los datos nuevos.
+    // "WithLifecycle": deja de observar si la app pasa a segundo plano (ahorra batería).
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // visible: activa la animación de entrada. rememberSaveable conserva el valor incluso
+    // si se rota la pantalla (remember solo sobrevive a recomposiciones).
     var visible by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { visible = true }
+    // LaunchedEffect(clave): ejecuta el bloque cuando la clave cambia. Si loggedUser deja
+    // de ser null, se llama a onLoginSuccess(usuario) -> AppNavegation navega.
     LaunchedEffect(state.loggedUser) { state.loggedUser?.let(onLoginSuccess) }
 
+    // Todo el formulario aparece con fade + deslizamiento (Animation.kt).
+    // verticalScroll permite desplazar si el teclado tapa los campos.
     AnimacionEntradaFormulario(visible = visible) {
         Column(
             modifier = Modifier
@@ -76,6 +92,8 @@ fun LoginScreen(
             Spacer(Modifier.height(24.dp))
 
             OutlinedTextField(
+                // Campo controlado: muestra el valor del estado y, al escribir, llama a
+                // onEmailChange (referencia a función con "::"). El ViewModel actualiza el estado.
                 value = state.email,
                 onValueChange = viewModel::onEmailChange,
                 label = { Text("Email") },
@@ -90,12 +108,14 @@ fun LoginScreen(
                 onValueChange = viewModel::onPasswordChange,
                 label = { Text("Contraseña") },
                 leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                // PasswordVisualTransformation oculta los caracteres con puntos.
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // ?.let: solo dibuja el error si no es null.
             state.error?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, color = MaterialTheme.colorScheme.error)
@@ -103,6 +123,7 @@ fun LoginScreen(
 
             Spacer(Modifier.height(24.dp))
             Button(
+                // Botón deshabilitado mientras carga; muestra un spinner en vez del texto.
                 onClick = viewModel::login,
                 enabled = !state.isLoading,
                 modifier = Modifier.fillMaxWidth().height(50.dp)
@@ -113,6 +134,7 @@ fun LoginScreen(
                     Text("Ingresar")
                 }
             }
+            // Navega al formulario de registro de clientes.
             TextButton(onClick = onRegistrarse) {
                 Text("¿Eres cliente y no tienes cuenta? Regístrate")
             }
